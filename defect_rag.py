@@ -8,7 +8,7 @@ from langchain.text_splitter import CharacterTextSplitter
 # 初始化LLM模型
 llm = ChatDeepSeek(
     model="deepseek-reasoner",
-    api_key="sk-0ea9167338bc4daf945bf8a769ade25f",
+    api_key="sk-0ea9167338bc4daf945bf8a769ade25f1",
     base_url="https://api.deepseek.com/v1",
 )
 
