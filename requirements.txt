@@ -1,0 +1,7 @@
+streamlit
+langchain_deepseek
+langchain
+faiss-cpu
+pandas
+openpyxl
+sentence-transformers

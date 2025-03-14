@@ -13,7 +13,7 @@ def init_llm():
     try:
         llm = ChatDeepSeek(
             model="deepseek-reasoner",
-            api_key="sk-f2c874ce43b2492a9cb96e74dd282b28",
+            api_key="sk-f2c874ce43b2492a94354354ghygh",
             base_url="https://api.deepseek.com",
         )
         # 测试API连接
@@ -52,16 +52,8 @@ def build_vector_store(_knowledge_base):
     
     # 遍历每个缺陷记录，构建文本内容和元数据
     for defect in defects:
-        # 构建结构化的文本内容，使用换行符分隔各个字段
-        # 这些文本内容将用于向量化和相似度计算
-        text = f"标题：{defect['title']}\n"  # 缺陷标题
-        text += f"描述：{defect['defect_description']}\n"  # 缺陷的详细描述
-        text += f"引入阶段：{defect['introduction_phase']}\n"  # 缺陷引入的开发阶段
-        text += f"缺陷类型：{defect['defect_type']}\n"  # 缺陷的分类类型
-        text += f"严重程度：{defect['severity_level']}\n"  # 缺陷的严重程度级别
-        text += f"评分类别：{defect['score_category']}\n"  # 缺陷的评分类别
-        text += f"缺陷场景：{defect['defect_scenario']}\n"  # 缺陷场景
-        text += f"来源：{defect['metadata']['source']}\n"  # 缺陷数据的来源
+        # 只使用缺陷描述字段作为向量化和相似度计算的依据
+        text = defect['defect_description']
         
         # 构建元数据字典，用于存储辅助信息
         # 这些信息不参与向量化和相似度计算，但可用于检索和显示
@@ -69,6 +61,14 @@ def build_vector_store(_knowledge_base):
             'id': defect['id'],  # 缺陷的唯一标识符
             'defect_number': defect['defect_number'],  # 缺陷的业务编号
             'product_name': defect['product_name'],  # 关联的产品名称
+            'title': defect['title'],  # 缺陷标题
+            'work_order': defect.get('work_order', ''),  # 工单号
+            'occurrence_probability': defect.get('occurrence_probability', ''),  # 发生概率
+            'score_category': defect.get('score_category', ''),  # 评分类别
+            'severity_level': defect.get('severity_level', ''),  # 严重程度
+            'defect_type': defect.get('defect_type', ''),  # 缺陷类型
+            'defect_scenario': defect.get('defect_scenario', ''),  # 缺陷场景
+            'introduction_phase': defect.get('introduction_phase', ''),  # 引入阶段
             'source': defect['metadata']['source']  # 数据来源，用于后续筛选
         }
         
@@ -114,10 +114,25 @@ def analyze_defect(defect_description, vector_store, llm):
         # 显示相似度信息
         st.write(f"**案例 {i} 相似度: {similarity:.2f}%**")
         st.write(f"内容: {doc.page_content}")
+        
+        # 显示元数据信息
+        if hasattr(doc, 'metadata') and doc.metadata:
+            st.write("**元数据信息:**")
+            metadata_info = ""
+            for key, value in doc.metadata.items():
+                if value and str(value).lower() != 'nan' and key != 'source':
+                    metadata_info += f"- {key}: {value}\n"
+            st.write(metadata_info)
         st.write("---")
         
-        # 添加到上下文
-        context += f"案例{i}：\n{doc.page_content}\n\n"
+        # 添加到上下文，包含更多元数据信息
+        context += f"案例{i}：\n{doc.page_content}\n"
+        if hasattr(doc, 'metadata') and doc.metadata:
+            context += "元数据信息:\n"
+            for key, value in doc.metadata.items():
+                if value and str(value).lower() != 'nan' and key != 'source':
+                    context += f"{key}: {value}\n"
+            context += "\n"
     
     # 加载系统提示
     system_prompt = load_system_prompt('sys.md')

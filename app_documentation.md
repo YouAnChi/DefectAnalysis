@@ -43,6 +43,16 @@
 输出分析结果
 ```
 
+智能缺陷分析系统的流程模块分析如下：
+
+1. 用户输入缺陷描述：通过app.py中的main()函数创建的Streamlit界面接收用户输入
+2. 加载历史缺陷知识库：由load_knowledge_base()函数从defects_knowledge_base.json文件读取数据
+3. 向量化用户输入：在analyze_defect()函数中，使用init_embeddings()初始化的text2vec-base-chinese模型将用户输入转换为向量
+4. 检索相似历史案例：通过build_vector_store()构建的FAISS向量库使用similarity_search_with_score方法检索相似案例
+5. 构建增强上下文：在analyze_defect()函数中将检索到的案例组织成上下文字符串
+6. 调用LLM进行分析：使用init_llm()初始化的deepseek-reasoner模型进行分析
+7. 实时展示推理过程和输出分析结果：通过Streamlit的占位符功能实时更新UI显示
+
 ### 2.2 详细流程说明
 
 1. **初始化阶段**
