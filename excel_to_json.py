@@ -34,7 +34,6 @@ def excel_to_json(excel_file):
             "metadata": {
                 "source": row.get('问题来源', ''),
                 "tags": [],  # 可以根据描述提取关键词
-                "created_by": row.get('创建人', ''),
                 "created_at": row.get('创建时间', ''),
                 "resolution_status": row.get('问题状态', ''),
                 "learning_count": row.get('学习次数', 0),
