@@ -1,22 +1,39 @@
 import json
+import os
+import logging
 import pandas as pd
 from langchain_deepseek import ChatDeepSeek
 from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
+from tqdm import tqdm
+from cache_utils import VectorSearchCache
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("defect_analysis.log"),
+        logging.StreamHandler()
+    ]
+)
 
 # 初始化LLM模型
 def init_llm():
     try:
+        logging.info("正在初始化LLM模型...")
         llm = ChatDeepSeek(
             model="deepseek-reasoner",
             api_key="sk-f2c874ce43b2492a9cb96e74dd282b28",
             base_url="https://api.deepseek.com",
         )
         # 测试API连接
+        logging.info("测试LLM API连接...")
         llm.invoke([{"role": "user", "content": "测试连接"}])
+        logging.info("LLM模型初始化成功")
         return llm
     except Exception as e:
-        print(f"初始化LLM模型失败: {str(e)}")
+        logging.error(f"初始化LLM模型失败: {str(e)}")
         return None
 
 # 初始化向量化模型
@@ -26,145 +43,362 @@ def init_embeddings():
 # 加载知识库
 def load_knowledge_base(file_path):
     try:
+        logging.info(f"正在加载知识库文件: {file_path}")
+        if not os.path.exists(file_path):
+            logging.error(f"知识库文件不存在: {file_path}")
+            return None
+            
         with open(file_path, 'r', encoding='utf-8') as f:
             knowledge_base = json.load(f)
+            logging.info(f"知识库加载成功，包含 {len(knowledge_base.get('defects', []))} 条缺陷记录")
             return knowledge_base
+    except json.JSONDecodeError as e:
+        logging.error(f"知识库文件JSON格式错误: {str(e)}")
+        return None
     except Exception as e:
-        print(f"读取知识库文件失败: {e}")
+        logging.error(f"读取知识库文件失败: {str(e)}")
         return None
 
 # 构建向量存储
 def build_vector_store(_knowledge_base):
-    defects = _knowledge_base['defects']
-    texts = []
-    metadatas = []
-    
-    for defect in defects:
-        text = defect['defect_description']
-        metadata = {
-            'id': defect['id'],
-            'defect_number': defect['defect_number'],
-            'product_name': defect['product_name'],
-            'title': defect['title'],
-            'work_order': defect.get('work_order', ''),
-            'occurrence_probability': defect.get('occurrence_probability', ''),
-            'score_category': defect.get('score_category', ''),
-            'severity_level': defect.get('severity_level', ''),
-            'defect_type': defect.get('defect_type', ''),
-            'defect_scenario': defect.get('defect_scenario', ''),
-            'introduction_phase': defect.get('introduction_phase', ''),
-            'source': defect['metadata']['source']
-        }
-        texts.append(text)
-        metadatas.append(metadata)
-    
-    vector_store = FAISS.from_texts(texts, init_embeddings(), metadatas=metadatas)
-    return vector_store
+    try:
+        logging.info("开始构建向量存储...")
+        defects = _knowledge_base['defects']
+        total_defects = len(defects)
+        logging.info(f"共有 {total_defects} 条缺陷记录需要处理")
+        
+        texts = []
+        metadatas = []
+        
+        # 使用tqdm添加进度条
+        for defect in tqdm(defects, desc="处理缺陷记录", unit="条"):
+            try:
+                text = defect['defect_description']
+                if not text or pd.isna(text) or text.strip() == "":
+                    continue
+                    
+                metadata = {
+                    'id': defect['id'],
+                    'defect_number': defect['defect_number'],
+                    'product_name': defect['product_name'],
+                    'title': defect['title'],
+                    'work_order': defect.get('work_order', ''),
+                    'occurrence_probability': defect.get('occurrence_probability', ''),
+                    'score_category': defect.get('score_category', ''),
+                    'severity_level': defect.get('severity_level', ''),
+                    'defect_type': defect.get('defect_type', ''),
+                    'defect_scenario': defect.get('defect_scenario', ''),
+                    'introduction_phase': defect.get('introduction_phase', ''),
+                    'source': defect['metadata']['source']
+                }
+                texts.append(text)
+                metadatas.append(metadata)
+            except KeyError as e:
+                logging.warning(f"缺陷记录缺少必要字段: {str(e)}，跳过该记录")
+                continue
+            except Exception as e:
+                logging.warning(f"处理缺陷记录时出错: {str(e)}，跳过该记录")
+                continue
+        
+        logging.info(f"成功处理 {len(texts)} 条有效缺陷记录，开始构建向量索引...")
+        embeddings = init_embeddings()
+        vector_store = FAISS.from_texts(texts, embeddings, metadatas=metadatas)
+        logging.info("向量存储构建完成")
+        return vector_store
+    except Exception as e:
+        logging.error(f"构建向量存储失败: {str(e)}")
+        return None
 
 # 读取系统提示文件
 def load_system_prompt(file_path):
     try:
+        logging.info(f"正在加载系统提示文件: {file_path}")
+        if not os.path.exists(file_path):
+            logging.error(f"系统提示文件不存在: {file_path}")
+            return None
+            
         with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read().strip()
+            content = f.read().strip()
+            logging.info(f"系统提示文件加载成功: {file_path}")
+            return content
     except Exception as e:
-        print(f"读取系统提示文件失败: {e}")
+        logging.error(f"读取系统提示文件失败: {file_path}, 错误: {str(e)}")
         return None
 
-# 分析缺陷
-def analyze_defect(defect_description, vector_store, llm):
-    similar_docs = vector_store.similarity_search_with_score(
-        defect_description,
-        k=3
-    )
-    
-    context = "历史相似案例：\n"
-    for i, (doc, score) in enumerate(similar_docs, 1):
-        similarity = 100 / (1 + score)
-        context += f"案例{i}（相似度: {similarity:.2f}%）：\n{doc.page_content}\n"
-        if hasattr(doc, 'metadata') and doc.metadata:
-            context += "元数据信息:\n"
-            for key, value in doc.metadata.items():
-                if value and str(value).lower() != 'nan' and key != 'source':
-                    context += f"{key}: {value}\n"
-            context += "\n"
-    
-    system_prompt = load_system_prompt('sys.md')
-    if system_prompt is None:
-        system_prompt = "你是一个专业的缺陷分析专家，请分析给定缺陷的可能原因和解决方案。"
-    
-    messages = [
-        ("system", system_prompt),
-        ("human", f"请基于以下历史案例分析当前缺陷：\n\n{context}\n当前缺陷描述：\n{defect_description}")
-    ]
-    
-    reasoning_content = ""
-    answer_content = ""
-    
-    for chunk in llm.stream(messages):
-        if hasattr(chunk, 'additional_kwargs') and 'reasoning_content' in chunk.additional_kwargs:
-            reasoning_content += chunk.additional_kwargs['reasoning_content']
-        elif chunk.text():
-            answer_content += chunk.text()
-    
-    return reasoning_content, answer_content
+# 初始化缓存
+vector_search_cache = VectorSearchCache()
 
-def main():
-    print("正在初始化系统...")
+# 分析缺陷
+def analyze_defect(defect_description, defect_title, score_category, vector_store, llm, similarity_threshold=0.3, use_cache=True):
+    try:
+        logging.info(f"开始分析缺陷: {defect_title if defect_title else '无标题'}")
+        
+        # 根据评分分类选择不同的系统提示词文件和筛选条件
+        system_prompt_file = 'sys.md'  # 默认系统提示词文件
+        
+        # 根据评分分类设置筛选条件
+        if score_category == '功能使用':
+            system_prompt_file = 'sys.md'
+            logging.info("使用功能使用评分分类")
+        elif score_category == '体验良好':
+            system_prompt_file = 'sys2.md'
+            logging.info("使用体验良好评分分类")
+        elif score_category == '性能效率':
+            system_prompt_file = 'sys3.md'
+            logging.info("使用性能效率评分分类")
+        else:
+            logging.info(f"未知评分分类: {score_category}，使用默认系统提示词文件")
+        
+        # 检索相似案例
+        logging.info("开始检索相似案例...")
+        similar_docs = []
+        
+        # 尝试从缓存获取结果
+        if use_cache:
+            cached_results = vector_search_cache.get(defect_description, score_category, 8)
+            if cached_results:
+                logging.info("使用缓存的检索结果")
+                # 将缓存结果转换回原始格式
+                from langchain.schema import Document
+                similar_docs = []
+                for item in cached_results:
+                    doc = Document(page_content=item['page_content'], metadata=item['metadata'])
+                    score = item['score']
+                    similar_docs.append((doc, score))
+        
+        # 如果缓存未命中，则执行检索
+        if not similar_docs:
+            try:
+                # 先根据评分分类筛选知识库中的文档
+                from langchain.schema import Document
+                filtered_docs = []
+                
+                # 获取向量存储中的所有文档
+                all_docs = vector_store.docstore._dict.values()
+                
+                # 根据评分分类筛选文档
+                for doc in all_docs:
+                    if isinstance(doc, Document) and doc.metadata.get('score_category') == score_category:
+                        filtered_docs.append(doc)
+                
+                logging.info(f"根据评分分类'{score_category}'筛选出 {len(filtered_docs)} 个文档")
+                
+                # 如果筛选后的文档数量太少，则使用原始检索
+                if len(filtered_docs) < 5:
+                    logging.info(f"筛选后文档数量不足，使用原始检索")
+                    similar_docs = vector_store.similarity_search_with_score(
+                        defect_description,
+                        k=8
+                    )
+                else:
+                    # 创建临时向量存储用于检索
+                    from langchain.vectorstores import FAISS
+                    embeddings = init_embeddings()
+                    texts = [doc.page_content for doc in filtered_docs]
+                    metadatas = [doc.metadata for doc in filtered_docs]
+                    temp_vector_store = FAISS.from_texts(texts, embeddings, metadatas=metadatas)
+                    
+                    # 在筛选后的文档中进行相似度检索
+                    similar_docs = temp_vector_store.similarity_search_with_score(
+                        defect_description,
+                        k=8
+                    )
+                
+                logging.info(f"检索到 {len(similar_docs)} 个候选案例")
+                
+                # 保存结果到缓存
+                if use_cache:
+                    vector_search_cache.set(defect_description, score_category, 8, similar_docs)
+            except Exception as e:
+                logging.error(f"检索相似案例失败: {str(e)}")
+                similar_docs = []
+        
+        # 取前3个最相似的案例
+        similar_docs = similar_docs[:3] if similar_docs else []
+        
+        context = "历史相似案例：\n"
+        if not similar_docs:
+            context += "未找到相似案例，将基于缺陷描述直接进行分析。\n\n"
+            logging.warning("未找到相似案例，将基于缺陷描述直接进行分析")
+        else:
+            for i, (doc, score) in enumerate(similar_docs, 1):
+                similarity = 100 / (1 + score)
+                logging.info(f"案例{i}相似度: {similarity:.2f}%")
+                context += f"案例{i}（相似度: {similarity:.2f}%）：\n{doc.page_content}\n"
+                if hasattr(doc, 'metadata') and doc.metadata:
+                    context += "元数据信息:\n"
+                    for key, value in doc.metadata.items():
+                        if value and str(value).lower() != 'nan' and key != 'source':
+                            context += f"{key}: {value}\n"
+                    context += "\n"
+        
+        system_prompt = load_system_prompt(system_prompt_file)
+        if system_prompt is None:
+            logging.warning(f"系统提示文件 {system_prompt_file} 加载失败，使用默认提示词")
+            system_prompt = "你是一个专业的缺陷分析专家，请分析给定缺陷的可能原因和解决方案。"
+        
+        messages = [
+            ("system", system_prompt),
+            ("human", f"请基于以下历史案例分析当前缺陷：\n\n{context}\n当前缺陷标题：\n{defect_title}\n\n当前缺陷描述：\n{defect_description}\n\n评分分类：{score_category}")
+        ]
+        
+        logging.info("开始调用LLM进行分析...")
+        reasoning_content = ""
+        answer_content = ""
+        
+        try:
+            for chunk in llm.stream(messages):
+                if hasattr(chunk, 'additional_kwargs') and 'reasoning_content' in chunk.additional_kwargs:
+                    reasoning_content += chunk.additional_kwargs['reasoning_content']
+                elif chunk.text():
+                    answer_content += chunk.text()
+            logging.info("LLM分析完成")
+        except Exception as e:
+            logging.error(f"LLM调用失败: {str(e)}")
+            return f"LLM调用失败: {str(e)}", f"分析过程出错: {str(e)}"
+        
+        return reasoning_content, answer_content
+    except Exception as e:
+        logging.error(f"缺陷分析过程出错: {str(e)}")
+        return f"分析过程出错: {str(e)}", f"分析过程出错: {str(e)}"
+
+def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3, use_cache=True):
+    logging.info("=== 智能缺陷分析系统启动 ===")
+    logging.info(f"输入文件: {input_file}")
+    logging.info(f"输出文件: {output_file}")
+    logging.info(f"知识库文件: {knowledge_base_file}")
+    
+    # 检查输入文件是否存在
+    if not os.path.exists(input_file):
+        logging.error(f"输入文件不存在: {input_file}")
+        return
     
     # 加载知识库
-    knowledge_base = load_knowledge_base('defects_knowledge_base.json')
+    knowledge_base = load_knowledge_base(knowledge_base_file)
     if knowledge_base is None:
-        print("加载知识库失败，程序退出")
+        logging.error("加载知识库失败，程序退出")
         return
     
     # 构建向量存储
     vector_store = build_vector_store(knowledge_base)
+    if vector_store is None:
+        logging.error("构建向量存储失败，程序退出")
+        return
     
     # 初始化LLM模型
     llm = init_llm()
     if llm is None:
-        print("LLM模型初始化失败，程序退出")
+        logging.error("LLM模型初始化失败，程序退出")
         return
     
     try:
         # 读取Excel文件
-        df = pd.read_excel('缺陷1.xlsx')
-        if '缺陷描述' not in df.columns:
-            print("错误：Excel文件中没有'缺陷描述'列")
+        logging.info(f"正在读取Excel文件: {input_file}")
+        try:
+            df = pd.read_excel(input_file)
+        except Exception as e:
+            logging.error(f"读取Excel文件失败: {str(e)}")
             return
+            
+        if '缺陷描述' not in df.columns:
+            logging.error("错误：Excel文件中没有'缺陷描述'列")
+            return
+        
+        # 检查是否有缺陷标题列，如果没有则使用空字符串
+        has_title = '缺陷标题' in df.columns
+        logging.info(f"Excel文件{'包含' if has_title else '不包含'}缺陷标题列")
+        
+        # 检查是否有评分分类列，如果没有则使用默认值
+        has_score_category = '评分分类' in df.columns
+        logging.info(f"Excel文件{'包含' if has_score_category else '不包含'}评分分类列")
         
         # 创建结果DataFrame
         results_df = pd.DataFrame()
         results_df['缺陷描述'] = df['缺陷描述']
+        if has_title:
+            results_df['缺陷标题'] = df['缺陷标题']
+        if has_score_category:
+            results_df['评分分类'] = df['评分分类']
         results_df['推理过程'] = ''
         results_df['分析结果'] = ''
         
         # 逐行处理缺陷描述
         total_rows = len(df)
-        for index, row in df.iterrows():
-            print(f"\n正在处理第 {index + 1}/{total_rows} 条缺陷描述...")
+        logging.info(f"共有 {total_rows} 条缺陷描述需要处理")
+        
+        # 使用tqdm添加进度条
+        for index, row in tqdm(df.iterrows(), total=total_rows, desc="处理缺陷", unit="条"):
+            logging.info(f"\n正在处理第 {index + 1}/{total_rows} 条缺陷描述...")
             defect_description = row['缺陷描述']
             if pd.isna(defect_description) or not str(defect_description).strip():
-                print(f"跳过第 {index + 1} 行：缺陷描述为空")
+                logging.warning(f"跳过第 {index + 1} 行：缺陷描述为空")
                 continue
             
+            # 获取缺陷标题，如果没有则使用空字符串
+            defect_title = row['缺陷标题'] if has_title else ''
+            if pd.isna(defect_title):
+                defect_title = ''
+            
+            # 获取评分分类，如果没有则使用默认值'功能使用'
+            score_category = row['评分分类'] if has_score_category else '功能使用'
+            if pd.isna(score_category) or not str(score_category).strip():
+                score_category = '功能使用'
+            
             try:
-                reasoning, analysis = analyze_defect(str(defect_description), vector_store, llm)
+                # 分析缺陷
+                reasoning, analysis = analyze_defect(
+                    str(defect_description), 
+                    str(defect_title), 
+                    str(score_category), 
+                    vector_store, 
+                    llm,
+                    similarity_threshold=similarity_threshold,
+                    use_cache=use_cache
+                )
                 results_df.at[index, '推理过程'] = reasoning
                 results_df.at[index, '分析结果'] = analysis
-                print(f"第 {index + 1} 条处理完成")
+                logging.info(f"第 {index + 1} 条处理完成")
             except Exception as e:
-                print(f"处理第 {index + 1} 条时出错: {str(e)}")
+                error_msg = f"处理第 {index + 1} 条时出错: {str(e)}"
+                logging.error(error_msg)
                 results_df.at[index, '推理过程'] = f"处理出错: {str(e)}"
                 results_df.at[index, '分析结果'] = f"处理出错: {str(e)}"
         
         # 保存结果到新的Excel文件
-        output_file = '缺陷分析结果.xlsx'
-        results_df.to_excel(output_file, index=False)
-        print(f"\n分析完成！结果已保存到 {output_file}")
+        logging.info(f"正在保存结果到: {output_file}")
+        try:
+            results_df.to_excel(output_file, index=False)
+            logging.info(f"分析完成！结果已保存到 {output_file}")
+        except Exception as e:
+            logging.error(f"保存结果文件失败: {str(e)}")
         
     except Exception as e:
-        print(f"程序执行出错: {str(e)}")
+        logging.error(f"程序执行出错: {str(e)}")
 
+# 添加命令行参数支持
 if __name__ == "__main__":
-    main()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='智能缺陷分析系统')
+    parser.add_argument('--input', '-i', type=str, default='缺陷1.xlsx', help='输入Excel文件路径')
+    parser.add_argument('--output', '-o', type=str, default='缺陷分析结果.xlsx', help='输出Excel文件路径')
+    parser.add_argument('--knowledge', '-k', type=str, default='defects_knowledge_base.json', help='知识库文件路径')
+    parser.add_argument('--threshold', '-t', type=float, default=0.3, help='相似度阈值(0-1之间)')
+    parser.add_argument('--no-cache', action='store_true', help='禁用缓存')
+    parser.add_argument('--clear-cache', action='store_true', help='清理过期缓存')
+    
+    args = parser.parse_args()
+    
+    # 验证相似度阈值范围
+    if args.threshold < 0 or args.threshold > 1:
+        logging.error(f"相似度阈值必须在0-1之间，当前值: {args.threshold}")
+        args.threshold = 0.3
+        logging.info(f"已重置相似度阈值为默认值: {args.threshold}")
+    
+    # 清理过期缓存
+    if args.clear_cache:
+        logging.info("清理过期缓存...")
+        vector_search_cache.clear_expired()
+    
+    # 运行主函数
+    main(args.input, args.output, args.knowledge, args.threshold, not args.no_cache)
