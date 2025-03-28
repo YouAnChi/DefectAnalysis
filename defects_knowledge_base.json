@@ -31872,6 +31872,35 @@
       "solutions": []
     },
     {
+      "id": "DEF1100",
+      "defect_number": "QX-202504593",
+      "title": "【2024集团CHBN】专题图片选择本地JPG格式进行上传时提示：图片格式不正确",
+      "product_name": "智慧高校大数据平台",
+      "work_order": "AT-20241008-0003",
+      "occurrence_probability": "100%",
+      "defect_description": "【前置条件】\n本地存在JPG格式图片。\n【测试步骤与结果】\n1.点击政策专题，再次点击专题管理，进入专题管理页面；\n2.点击新建按钮，进入新建专题页面；\n3.内容正常填写，专题图片点击本地上传，选择一份JPG格式图片进行上传提示：图片格式不正确。\n【预期结果】\nJPG格式可正常上传。\n【备注】\n1.上传图片后缀名为大写PNG、JPEG、SVG格式图片文件均存在该问题；\n2.上传后缀格式为小写格式文件，不存在该问题。",
+      "score_category": "体验良好",
+      "severity_level": "低",
+      "defect_type": "易用性-易学易操作性（人性化帮助/一致性/协助记忆/灵活高效/容错性/简约设计）",
+      "defect_scenario": NaN,
+      "introduction_phase": "需求阶段-需求错误",
+      "metadata": {
+        "source": "集团政企测试",
+        "tags": [],
+        "created_at": "2025-01-15 13:52",
+        "resolution_status": "打开",
+        "learning_count": 0,
+        "like_count": 0,
+        "is_historical": "否",
+        "is_common": "否",
+        "notes": "漏测分析：1.集团和院内并行：集团测试出来的1个体验缺陷院内没有测出来，经核实，我处用例已覆盖。但集团测试角度有点刁钻，因需规上写“支持上传png\\jpg\\jpeg\\svg格式的图片”，我处设计了相应用例，使用小写后缀格式图片上传，但集团使用后缀为SVN的图片上传未成功，故提出一个体验bug，要求界面上标注“支持上传.png\\.jpg\\.jpeg\\.svg格式的图片”\n\n该测试场景已有用例覆盖，需规中说明支持相关格式，内容均为小写，执行人员默认按需规准备测试数据执行。\n根因分析：开发人员严格按照PRD需求进行开发，针对上传图片功能的开发使用自写代码，写死了仅支持小写后缀。",
+        "closure_reason": NaN,
+        "attachments": []
+      },
+      "similar_cases": [],
+      "solutions": []
+    },
+    {
       "id": "DEF1101",
       "defect_number": "QX-202504594",
       "title": "【2024集团CHBN】已建模型详情页面，点击关闭按钮弹出提示弹窗，点击确认按钮无法关闭详情页面",
@@ -76708,7 +76737,7 @@
   ],
   "metadata": {
     "version": "1.0",
-    "last_updated": "2025-03-11",
+    "last_updated": "2025-03-17",
     "total_records": 2646,
     "schema_version": "1.0.0"
   }
