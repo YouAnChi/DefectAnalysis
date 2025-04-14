@@ -262,7 +262,7 @@ def analyze_defect(defect_description, defect_title, score_category, vector_stor
         logging.error(f"缺陷分析过程出错: {str(e)}")
         return f"分析过程出错: {str(e)}", f"分析过程出错: {str(e)}"
 
-def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3, use_cache=True):
+def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果2646.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3, use_cache=True):
     logging.info("=== 智能缺陷分析系统启动 ===")
     logging.info(f"输入文件: {input_file}")
     logging.info(f"输出文件: {output_file}")
