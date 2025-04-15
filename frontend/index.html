@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成研所-计支-智能缺陷分析系统</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 自定义CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-light">
+    <div class="container py-4">
+        <header class="pb-3 mb-4 border-bottom">
+            <div class="d-flex align-items-center text-dark">
+                <i class="fas fa-microchip fs-4 me-3"></i>
+                <span class="fs-4">成研所-计支-智能缺陷分析系统</span>
+            </div>
+        </header>
+        
+        <main>
+            <!-- 上传区域 -->
+            <div class="p-5 mb-4 bg-white rounded-3 shadow-sm">
+                <div class="container-fluid py-2">
+                    <h2 class="fw-bold mb-4">上传缺陷数据</h2>
+                    <form id="upload-form">
+                        <div class="mb-3">
+                            <label for="file-upload" class="form-label">选择Excel文件：</label>
+                            <input class="form-control" type="file" id="file-upload" name="file" accept=".xlsx,.xls">
+                            <div class="form-text">请上传包含缺陷描述的Excel文件</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="knowledge-base" class="form-label">知识库文件：</label>
+                            <select class="form-select" id="knowledge-base" name="knowledge_base">
+                                <option value="defects_knowledge_base.json">默认知识库</option>
+                                <option value="custom">自定义知识库</option>
+                            </select>
+                            <input type="file" class="form-control mt-2" id="custom-knowledge" name="custom_knowledge" accept=".json" style="display: none;">
+                        </div>
+                        
+
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+                            <button type="submit" id="analyze-btn" class="btn btn-primary btn-lg px-4 me-md-2">
+                                <i class="fas fa-play me-2"></i>开始分析
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- 进度区域 -->
+            <div class="p-5 mb-4 bg-white rounded-3 shadow-sm progress-section" style="display: none;">
+                <div class="container-fluid py-2">
+                    <h2 class="fw-bold mb-4">分析进度</h2>
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div class="progress progress-bar bg-primary progress-bar-striped progress-bar-animated" style="width: 0%;"></div>
+                    </div>
+                    <p class="progress-text fs-5 text-center">0/0 条缺陷已分析</p>
+                </div>
+            </div>
+            
+            <!-- 结果区域 -->
+            <div class="p-5 mb-4 bg-white rounded-3 shadow-sm results-section" style="display: none;">
+                <div class="container-fluid py-2">
+                    <h2 class="fw-bold mb-4">分析结果</h2>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card text-white bg-primary mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">总计分析</h5>
+                                    <p class="card-text fs-2" id="total-count">0</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-white bg-success mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">成功</h5>
+                                    <p class="card-text fs-2" id="success-count">0</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-white bg-danger mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">失败</h5>
+                                    <p class="card-text fs-2" id="fail-count">0</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-start mb-4">
+                        <button id="download-btn" class="btn btn-success btn-lg px-4 me-md-2">
+                            <i class="fas fa-download me-2"></i>下载结果
+                        </button>
+                        <button id="view-details-btn" class="btn btn-info btn-lg px-4">
+                            <i class="fas fa-search me-2"></i>查看详情
+                        </button>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th scope="col">序号</th>
+                                    <th scope="col">缺陷标题</th>
+                                    <th scope="col">评分分类</th>
+                                    <th scope="col">分析结果</th>
+                                    <th scope="col">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body">
+                                <!-- 结果将通过JavaScript动态添加 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="pt-3 mt-4 text-muted border-top">
+            &copy; 2025 成研所-计支-智能缺陷分析系统
+        </footer>
+    </div>
+    
+    <!-- 详情模态框 -->
+    <div class="modal fade" id="detail-modal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailModalLabel">缺陷详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h4 id="detail-title" class="mb-3"></h4>
+                    <div class="mb-3">
+                        <h5>缺陷描述</h5>
+                        <p id="detail-description" class="p-3 bg-light rounded"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h5>评分分类</h5>
+                        <p id="detail-category" class="badge bg-primary fs-6"></p>
+                    </div>
+                    <div class="mb-3">
+                        <h5>分析结果</h5>
+                        <p id="detail-analysis" class="p-3 bg-light rounded"></p>
+                    </div>
+                    <div class="mb-3">
+                            <h4>推理过程</h4>
+                            <p id="detail-reasoning"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>© 2025 成研所-计支-智能缺陷分析系统 </p>
+        </footer>
+    </div>
+    
+    <script src="js/main.js"></script>
+</body>
+</html>
