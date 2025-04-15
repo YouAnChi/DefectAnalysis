@@ -6,7 +6,6 @@ from langchain_deepseek import ChatDeepSeek
 from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from tqdm import tqdm
-from cache_utils import VectorSearchCache
 
 # 配置日志
 logging.basicConfig(
@@ -125,11 +124,10 @@ def load_system_prompt(file_path):
         logging.error(f"读取系统提示文件失败: {file_path}, 错误: {str(e)}")
         return None
 
-# 初始化缓存
-vector_search_cache = VectorSearchCache()
+# 缓存机制已移除
 
 # 分析缺陷
-def analyze_defect(defect_description, defect_title, score_category, vector_store, llm, similarity_threshold=0.3, use_cache=True):
+def analyze_defect(defect_description, defect_title, score_category, vector_store, llm, similarity_threshold=0.3):
     try:
         logging.info(f"开始分析缺陷: {defect_title if defect_title else '无标题'}")
         
@@ -153,20 +151,7 @@ def analyze_defect(defect_description, defect_title, score_category, vector_stor
         logging.info("开始检索相似案例...")
         similar_docs = []
         
-        # 尝试从缓存获取结果
-        if use_cache:
-            cached_results = vector_search_cache.get(defect_description, score_category, 8)
-            if cached_results:
-                logging.info("使用缓存的检索结果")
-                # 将缓存结果转换回原始格式
-                from langchain.schema import Document
-                similar_docs = []
-                for item in cached_results:
-                    doc = Document(page_content=item['page_content'], metadata=item['metadata'])
-                    score = item['score']
-                    similar_docs.append((doc, score))
-        
-        # 如果缓存未命中，则执行检索
+        # 执行检索
         if not similar_docs:
             try:
                 # 先根据评分分类筛选知识库中的文档
@@ -206,9 +191,7 @@ def analyze_defect(defect_description, defect_title, score_category, vector_stor
                 
                 logging.info(f"检索到 {len(similar_docs)} 个候选案例")
                 
-                # 保存结果到缓存
-                if use_cache:
-                    vector_search_cache.set(defect_description, score_category, 8, similar_docs)
+                # 缓存机制已移除
             except Exception as e:
                 logging.error(f"检索相似案例失败: {str(e)}")
                 similar_docs = []
@@ -262,7 +245,7 @@ def analyze_defect(defect_description, defect_title, score_category, vector_stor
         logging.error(f"缺陷分析过程出错: {str(e)}")
         return f"分析过程出错: {str(e)}", f"分析过程出错: {str(e)}"
 
-def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果2646.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3, use_cache=True):
+def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果2646.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3):
     logging.info("=== 智能缺陷分析系统启动 ===")
     logging.info(f"输入文件: {input_file}")
     logging.info(f"输出文件: {output_file}")
@@ -352,8 +335,7 @@ def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果2646.xlsx', k
                     str(score_category), 
                     vector_store, 
                     llm,
-                    similarity_threshold=similarity_threshold,
-                    use_cache=use_cache
+                    similarity_threshold=similarity_threshold
                 )
                 results_df.at[index, '推理过程'] = reasoning
                 results_df.at[index, '分析结果'] = analysis
@@ -384,8 +366,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', '-o', type=str, default='缺陷分析结果.xlsx', help='输出Excel文件路径')
     parser.add_argument('--knowledge', '-k', type=str, default='defects_knowledge_base.json', help='知识库文件路径')
     parser.add_argument('--threshold', '-t', type=float, default=0.3, help='相似度阈值(0-1之间)')
-    parser.add_argument('--no-cache', action='store_true', help='禁用缓存')
-    parser.add_argument('--clear-cache', action='store_true', help='清理过期缓存')
+    # 缓存相关参数已移除
     
     args = parser.parse_args()
     
@@ -395,10 +376,5 @@ if __name__ == "__main__":
         args.threshold = 0.3
         logging.info(f"已重置相似度阈值为默认值: {args.threshold}")
     
-    # 清理过期缓存
-    if args.clear_cache:
-        logging.info("清理过期缓存...")
-        vector_search_cache.clear_expired()
-    
     # 运行主函数
-    main(args.input, args.output, args.knowledge, args.threshold, not args.no_cache)
+    main(args.input, args.output, args.knowledge, args.threshold)
