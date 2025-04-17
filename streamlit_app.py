@@ -21,10 +21,14 @@ if 'log_updated' not in st.session_state:
     st.session_state['log_updated'] = False
 if 'output_data' not in st.session_state:
     st.session_state['output_data'] = None
+if 'processed_data' not in st.session_state:
+    st.session_state['processed_data'] = None
 if 'log_data' not in st.session_state:
     st.session_state['log_data'] = None
 if 'analysis_completed' not in st.session_state:
     st.session_state['analysis_completed'] = False
+if 'data_processed' not in st.session_state:
+    st.session_state['data_processed'] = False
 
 # 创建一个队列用于存储日志信息
 log_queue = queue.Queue()
@@ -51,7 +55,7 @@ def main():
     # 添加说明
     st.markdown("""
     ### 使用说明
-    1. 上传包含缺陷信息的Excel文件（必须包含"缺陷描述"列，可选包含"缺陷标题"和"评分分类"列）
+    1. 上传包含缺陷信息的Excel文件（必须包含"缺陷描述"列，"缺陷标题"和"评分分类"列）
     2. 点击"开始分析"按钮
     3. 等待分析完成后下载结果文件
     """)
@@ -62,7 +66,7 @@ def main():
     # 如果分析已完成，显示下载按钮区域
     if st.session_state['analysis_completed']:
         st.success("分析已完成，可以下载结果文件和日志")
-        download_col1, download_col2 = st.columns(2)
+        download_col1, download_col2, download_col3 = st.columns(3)
         
         with download_col1:
             if st.session_state['output_data'] is not None:
@@ -82,6 +86,54 @@ def main():
                     file_name="defect_analysis_full.log",
                     mime="text/plain",
                     key="download_log"
+                )
+                
+        with download_col3:
+            if not st.session_state['data_processed'] and st.session_state['output_data'] is not None:
+                if st.button("提取缺陷数据", key="extract_data"):
+                    with st.spinner("正在提取缺陷数据..."):
+                        # 创建临时输入文件
+                        temp_input_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+                        temp_input_file.write(st.session_state['output_data'])
+                        input_file_path = temp_input_file.name
+                        temp_input_file.close()
+                        
+                        # 创建临时输出文件
+                        temp_output_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+                        output_file_path = temp_output_file.name
+                        temp_output_file.close()
+                        
+                        # 调用extract_defect_data.py处理文件
+                        try:
+                            from extract_defect_data import extract_data_from_column
+                            extract_data_from_column(input_file_path, output_file_path)
+                            
+                            # 读取处理后的文件
+                            if os.path.exists(output_file_path) and os.path.getsize(output_file_path) > 0:
+                                with open(output_file_path, "rb") as f:
+                                    processed_data = f.read()
+                                st.session_state['processed_data'] = processed_data
+                                st.session_state['data_processed'] = True
+                                st.success("缺陷数据提取完成！")
+                                st.rerun()
+                            else:
+                                st.error("提取缺陷数据失败，未生成结果文件")
+                        except Exception as e:
+                            st.error(f"提取缺陷数据时出错: {str(e)}")
+                        finally:
+                            # 清理临时文件
+                            try:
+                                os.unlink(input_file_path)
+                                os.unlink(output_file_path)
+                            except Exception as e:
+                                st.warning(f"清理临时文件失败: {str(e)}")
+            elif st.session_state['data_processed'] and st.session_state['processed_data'] is not None:
+                st.download_button(
+                    label="下载提取后的缺陷数据",
+                    data=st.session_state['processed_data'],
+                    file_name="缺陷数据提取结果.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="download_processed"
                 )
     
     with col1:
