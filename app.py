@@ -111,10 +111,17 @@ def build_vector_store(_knowledge_base):
 # 读取系统提示文件
 def load_system_prompt(file_path):
     try:
+        # 处理相对路径
+        if not os.path.isabs(file_path):
+            # 获取当前脚本所在目录
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            file_path = os.path.join(script_dir, file_path)
+            
         logging.info(f"正在加载系统提示文件: {file_path}")
         if not os.path.exists(file_path):
-            logging.error(f"系统提示文件不存在: {file_path}")
-            return None
+            logging.warning(f"系统提示文件不存在: {file_path}，将使用默认提示词")
+            # 返回默认提示词而不是None
+            return "你是一个专业的缺陷分析专家，请分析给定缺陷的可能原因和解决方案。"
             
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read().strip()
@@ -122,7 +129,8 @@ def load_system_prompt(file_path):
             return content
     except Exception as e:
         logging.error(f"读取系统提示文件失败: {file_path}, 错误: {str(e)}")
-        return None
+        # 返回默认提示词而不是None
+        return "你是一个专业的缺陷分析专家，请分析给定缺陷的可能原因和解决方案。"
 
 # 缓存机制已移除
 
@@ -215,10 +223,9 @@ def analyze_defect(defect_description, defect_title, score_category, vector_stor
                             context += f"{key}: {value}\n"
                     context += "\n"
         
+        # 加载系统提示文件，load_system_prompt函数已修改为在文件不存在时返回默认提示词
         system_prompt = load_system_prompt(system_prompt_file)
-        if system_prompt is None:
-            logging.warning(f"系统提示文件 {system_prompt_file} 加载失败，使用默认提示词")
-            system_prompt = "你是一个专业的缺陷分析专家，请分析给定缺陷的可能原因和解决方案。"
+        logging.info(f"使用系统提示词: {system_prompt_file}")
         
         messages = [
             ("system", system_prompt),
@@ -245,7 +252,22 @@ def analyze_defect(defect_description, defect_title, score_category, vector_stor
         logging.error(f"缺陷分析过程出错: {str(e)}")
         return f"分析过程出错: {str(e)}", f"分析过程出错: {str(e)}"
 
-def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果2646.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3):
+def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果.xlsx', knowledge_base_file='defects_knowledge_base.json', similarity_threshold=0.3):
+    # 确保输入文件路径是绝对路径
+    input_file = os.path.abspath(input_file)
+    output_file = os.path.abspath(output_file)
+    
+    # 处理知识库文件路径
+    # 如果知识库文件路径不是绝对路径，则尝试在当前脚本目录下查找
+    if not os.path.isabs(knowledge_base_file):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        default_knowledge_path = os.path.join(script_dir, knowledge_base_file)
+        if os.path.exists(default_knowledge_path):
+            knowledge_base_file = default_knowledge_path
+        else:
+            # 如果当前目录下没有找到，则使用绝对路径
+            knowledge_base_file = os.path.abspath(knowledge_base_file)
+    
     logging.info("=== 智能缺陷分析系统启动 ===")
     logging.info(f"输入文件: {input_file}")
     logging.info(f"输出文件: {output_file}")
@@ -255,8 +277,25 @@ def main(input_file='缺陷1.xlsx', output_file='缺陷分析结果2646.xlsx', k
     if not os.path.exists(input_file):
         logging.error(f"输入文件不存在: {input_file}")
         return
+        
+    # 确保输出目录存在
+    output_dir = os.path.dirname(output_file)
+    if not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            logging.info(f"已创建输出目录: {output_dir}")
+        except Exception as e:
+            logging.error(f"创建输出目录失败: {str(e)}")
+            return
     
     # 加载知识库
+    # 如果指定的知识库文件不存在，尝试使用默认知识库
+    if not os.path.exists(knowledge_base_file):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        default_knowledge_file = os.path.join(script_dir, 'defects_knowledge_base.json')
+        logging.warning(f"指定的知识库文件不存在: {knowledge_base_file}，尝试使用默认知识库: {default_knowledge_file}")
+        knowledge_base_file = default_knowledge_file
+    
     knowledge_base = load_knowledge_base(knowledge_base_file)
     if knowledge_base is None:
         logging.error("加载知识库失败，程序退出")
